@@ -5,6 +5,7 @@
  * Copyright (c) 2013 Marc Müller-Weinhardt <muewei@tzi.de>
  * Copyright (c) 2013 Lars Schmertmann <lars@tzi.de>
  * Copyright (c) 2013 Hauke Mehrtens <hauke@hauke-m.de>
+ * Copyright (c) 2018 Nikolas Rösener <nroesener@uni-bremen.de>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -32,13 +33,15 @@
  * [0]: http://cockrum.net/Implementation_of_ECC_on_an_8-bit_microcontroller.pdf
  *
  * This is a efficient ECC implementation on the secp256r1 curve for 32 Bit CPU
- * architectures. It provides basic operations on the secp256r1 curve and support
+ * architectures, modified to also support other short Weierstrass curves like Wei25519.
+ * It provides basic operations on short Weierstrass curves and support
  * for ECDH and ECDSA.
  */
 
-//big number functions
 #include "ecc.h"
 #include <string.h>
+
+/* Big number functions */
 
 static uint32_t add( const uint32_t *x, const uint32_t *y, uint32_t *result, uint8_t length){
 	uint64_t d = 0; //carry
@@ -75,35 +78,95 @@ static void rshiftby(const uint32_t *in, uint8_t in_size, uint32_t *out, uint8_t
 		out[i] = 0;
 }
 
-//finite field functions
-//FFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF
-static const uint32_t ecc_prime_m[8] = {0xffffffff, 0xffffffff, 0xffffffff, 0x00000000,
-					0x00000000, 0x00000000, 0x00000001, 0xffffffff};
+/* Constants and initialization */
 
+static const uint32_t p256_a [8]  = {0x00000003, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000};
+static const uint32_t p256_p[9]   = {0xffffffff, 0xffffffff, 0xffffffff, 0x00000000, 0x00000000, 0x00000000, 0x00000001, 0xffffffff, 0x00000000};
+static const uint32_t p256_pr[8]  = {0x00000001, 0x00000000, 0x00000000, 0xffffffff, 0xffffffff, 0xffffffff, 0xfffffffe, 0x00000000};
+static const uint32_t p256_n[9]   = {0xFC632551, 0xF3B9CAC2, 0xA7179E84, 0xBCE6FAAD, 0xFFFFFFFF, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000};
+static const uint32_t p256_or[8]  = {0x039CDAAF, 0x0C46353D, 0x58E8617B, 0x43190552, 0x00000000, 0x00000000, 0xFFFFFFFF, 0x00000000};
+static const uint32_t p256_omu[9] = {0xEEDF9BFE, 0x012FFD85, 0xDF1A6C21, 0x43190552,0xFFFFFFFF, 0xFFFFFFFE, 0xFFFFFFFF, 0x00000000, 0x00000001};
+static const uint32_t p256_pmu[9] = {0x00000003, 0x00000000, 0xffffffff, 0xfffffffe, 0xfffffffe, 0xfffffffe, 0xffffffff, 0x00000000, 0x00000001};
+	   const uint32_t p256_gx[8]  = { 0xD898C296, 0xF4A13945, 0x2DEB33A0, 0x77037D81, 0x63A440F2, 0xF8BCE6E5, 0xE12C4247, 0x6B17D1F2};
+	   const uint32_t p256_gy[8]  = { 0x37BF51F5, 0xCBB64068, 0x6B315ECE, 0x2BCE3357, 0x7C0F9E16, 0x8EE7EB4A, 0xFE1A7F9B, 0x4FE342E2};
+static const uint8_t  p256_k      = 8;
+static const uint8_t  p256_prime_shift = 0;
+static void fieldModP256(uint32_t *A, const uint32_t *B);
 							
-/* This is added after an static byte addition if the answer has a carry in MSB*/
-static const uint32_t ecc_prime_r[8] = {0x00000001, 0x00000000, 0x00000000, 0xffffffff,
-					0xffffffff, 0xffffffff, 0xfffffffe, 0x00000000};
+static const uint32_t wei25519_a[8]   = {0xb6eb5ea9, 0x55555567, 0x55555555, 0x55555555, 0x55555555, 0x55555555, 0x55555555, 0x55555555};
+static const uint32_t wei25519_p[9]   = {0xffffffed, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0x7fffffff, 0x00000000};
+static const uint32_t wei25519_pr[8]  = {0x00000013, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x80000000};
+static const uint32_t wei25519_n[9]   = {0x5cf5d3ed, 0x5812631a, 0xa2f79cd6, 0x14def9de, 0x00000000, 0x00000000, 0x00000000, 0x10000000, 0x00000000};
+static const uint32_t wei25519_or[8]  = {0xa30a2c13, 0xa7ed9ce5, 0x5d086329, 0xeb210621, 0xffffffff, 0xffffffff, 0xffffffff, 0xefffffff};
+static const uint32_t wei25519_omu[9] = {0x0a2c131b, 0xed9ce5a3, 0x086329a7, 0x2106215d, 0xffffffeb, 0xffffffff, 0xffffffff, 0xffffffff, 0x0000000f};
+static const uint32_t wei25519_pmu[9] = {0x0000004c, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000002};
+	   const uint32_t wei25519_gx[8]  = {0xaaad245a, 0xaaaaaaaa, 0xaaaaaaaa, 0xaaaaaaaa, 0xaaaaaaaa, 0xaaaaaaaa, 0xaaaaaaaa, 0x2aaaaaaa};
+	   const uint32_t wei25519_gy[8]  = {0x7eced3d9, 0x29e9c5a2, 0x6d7c61b2, 0x923d4d7e, 0x7748d14c, 0xe01edd2c, 0xb8a086b4, 0x20ae19a1};
+static const uint8_t wei25519_k       = 8;
+static const uint8_t wei25519_prime_shift = 3;
+static void fieldModGeneric(uint32_t *A, const uint32_t *B);
 
-// ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551
-static const uint32_t ecc_order_m[9] = {0xFC632551, 0xF3B9CAC2, 0xA7179E84, 0xBCE6FAAD,
-					0xFFFFFFFF, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF,
-					0x00000000};
+// ShortWeierstrassCurve<y^2 = x^3 + 0x2 x + 0x1ac1da05b55bc14633bd39e47f94302ef19843dcf669916f6a5dfd0165538cd1 mod 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffed>
+// Relevant domain parameters:
+static const uint32_t wei25519_2_a[8] = {0x00000002, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000};  // curve parameter a_4 = a
+static const uint32_t wei25519_2_gx[8] = {0x7a940ffa, 0x5ee3c4e8, 0x072ea193, 0xd9ad4def, 0x582275b6, 0x318e8634, 0x78aed661, 0x17cfeac3};  // the x coordinate of the base point
+static const uint32_t wei25519_2_gy[8] = {0x51e16b4d, 0xf0d7fdcc, 0x297a37b6, 0xdc5c331d, 0xa8f68dca, 0x2c4f13f1, 0xc55dfad6, 0x0c08a952};  // the y coordinate of the base point
 
-static const uint32_t ecc_order_r[8] = {0x039CDAAF, 0x0C46353D, 0x58E8617B, 0x43190552,
-					0x00000000, 0x00000000, 0xFFFFFFFF, 0x00000000};
+// initialize with P-256 by default
+const uint32_t* ecc_param_a		= p256_a;
+const uint32_t* ecc_prime_m		= p256_p;
+const uint32_t* ecc_prime_p		= p256_p;
+const uint32_t* ecc_prime_r		= p256_pr;
+const uint32_t* ecc_order_m		= p256_n;
+const uint32_t* ecc_order_r		= p256_or;
+const uint32_t* ecc_order_mu	= p256_omu;
+const uint32_t* ecc_prime_mu	= p256_pmu;
+const uint32_t* ecc_g_point_x	= p256_gx;
+const uint32_t* ecc_g_point_y	= p256_gy;
+	  uint8_t   ecc_order_k		= p256_k;
+	  uint8_t   ecc_prime_shift	= p256_prime_shift;
+void (*fieldModP)(uint32_t *result, const uint32_t *A) = &fieldModP256;
 
-static const uint32_t ecc_order_mu[9] = {0xEEDF9BFE, 0x012FFD85, 0xDF1A6C21, 0x43190552,
-					 0xFFFFFFFF, 0xFFFFFFFE, 0xFFFFFFFF, 0x00000000,
-					 0x00000001};
+static int init(const uint32_t* a, const uint32_t* b, const uint32_t* p, const uint32_t* n,
+					const uint32_t* pr, const uint32_t* or, const uint32_t* omu, const uint32_t* pmu,
+					const uint32_t* gx, const uint32_t* gy, const uint8_t k, const uint8_t prime_shift,
+					void (*modfun)(uint32_t *result, const uint32_t *A)) {
+	ecc_param_a = a;
+	ecc_prime_m = p;
+	ecc_prime_p = p;
+	ecc_prime_r = pr;
+	ecc_order_m = n;
+	ecc_order_r = or;
+	ecc_order_mu = omu;
+	ecc_prime_mu = pmu;
+	ecc_g_point_x = gx;
+	ecc_g_point_y = gy;
+	ecc_order_k = k;
+	ecc_prime_shift = prime_shift;
+	fieldModP = modfun;
+	return 0;
+}
 
-static const uint8_t ecc_order_k = 8;
+int ecc_ec_init(const ec_curve_t curve) {
+	switch(curve) {
+		case SECP256R1:
+			return init(p256_a, 0, p256_p, p256_n, p256_pr, p256_or,
+						p256_omu, p256_pmu, p256_gx, p256_gy, p256_k,
+						p256_prime_shift, fieldModP256);
+		case WEI25519:
+			return init(wei25519_a, 0, wei25519_p, wei25519_n, wei25519_pr, wei25519_or,
+						wei25519_omu, wei25519_pmu, wei25519_gx, wei25519_gy, wei25519_k,
+						wei25519_prime_shift, fieldModGeneric);
+		case WEI25519_2:
+			return init(wei25519_2_a, 0, wei25519_p, wei25519_n, wei25519_pr, wei25519_or,
+						wei25519_omu, wei25519_pmu, wei25519_2_gx, wei25519_2_gy, wei25519_k,
+						wei25519_prime_shift, fieldModGeneric);
+		default:
+			return -1;
+	}
+}
 
-const uint32_t ecc_g_point_x[8] = { 0xD898C296, 0xF4A13945, 0x2DEB33A0, 0x77037D81,
-				    0x63A440F2, 0xF8BCE6E5, 0xE12C4247, 0x6B17D1F2};
-const uint32_t ecc_g_point_y[8] = { 0x37BF51F5, 0xCBB64068, 0x6B315ECE, 0x2BCE3357,
-				    0x7C0F9E16, 0x8EE7EB4A, 0xFE1A7F9B, 0x4FE342E2};
-
+/* Finite field functions */
 
 static void setZero(uint32_t *A, const int length){
 	memset(A, 0x0, length * sizeof(uint32_t));
@@ -177,7 +240,7 @@ static int fieldMult(const uint32_t *x, const uint32_t *y, uint32_t *result, uin
 
 //TODO: maximum:
 //fffffffe00000002fffffffe0000000100000001fffffffe00000001fffffffe00000001fffffffefffffffffffffffffffffffe000000000000000000000001_16
-static void fieldModP(uint32_t *A, const uint32_t *B)
+static void fieldModP256(uint32_t *A, const uint32_t *B)
 {
 	uint32_t tempm[8];
 	uint32_t tempm2[8];
@@ -251,54 +314,6 @@ static void fieldModP(uint32_t *A, const uint32_t *B)
 	}
 }
 
-/**
- * calculate the result = A mod n.
- * n is the order of the eliptic curve.
- * A and result could point to the same value
- *
- * A: input value (max size * 4 bytes)
- * result: result of modulo calculation (max 36 bytes)
- * size: size of A
- *
- * This uses the Barrett modular reduction as described in the Handbook 
- * of Applied Cryptography 14.42 Algorithm Barrett modular reduction, 
- * see http://cacr.uwaterloo.ca/hac/about/chap14.pdf and 
- * http://everything2.com/title/Barrett+Reduction
- *
- * b = 32 (bite size of the processor architecture)
- * mu (ecc_order_mu) was precomputed in a java program
- */
-static void fieldModO(const uint32_t *A, uint32_t *result, uint8_t length) {
-	// This is used for value q1 and q3
-	uint32_t q1_q3[9];
-	// This is used for q2 and a temp var
-	uint32_t q2_tmp[18];
-
-	// return if the given value is smaller than the modulus
-	if (length == arrayLength && isGreater(A, ecc_order_m, arrayLength) <= 0) {
-		if (A != result)
-		        copy(A, result, length);
-		return;
-	}
-
-	rshiftby(A, length, q1_q3, 9, ecc_order_k - 1);
-
-	fieldMult(ecc_order_mu, q1_q3, q2_tmp, 9);
-
-	rshiftby(q2_tmp, 18, q1_q3, 8, ecc_order_k + 1);
-
-	// r1 = first 9 blocks of A
-
-	fieldMult(q1_q3, ecc_order_m, q2_tmp, 8);
-
-	// r2 = first 9 blocks of q2_tmp
-
-	sub(A, q2_tmp, result, 9);
-
-	while (isGreater(result, ecc_order_m, 9) >= 0)
-		sub(result, ecc_order_m, result, 9);
-}
-
 static int isOne(const uint32_t* A){
 	uint8_t n; 
 	for(n=1;n<8;n++) 
@@ -330,6 +345,69 @@ static void rshift(uint32_t* A){
 	}
 }
 
+/**
+ * Calculates the result = A mod X where X <= p.
+ *
+ * A and result could point to the same value
+ *
+ * A: input value (max size * 4 bytes)
+ * result: result of modulo calculation (max 36 bytes)
+ * length: size of A
+ * modulus: the modulus X
+ * k: the cofactor k
+ * result_length: size of result
+ *
+ * This uses the Barrett modular reduction as described in the Handbook
+ * of Applied Cryptography 14.42 Algorithm Barrett modular reduction,
+ * see http://cacr.uwaterloo.ca/hac/about/chap14.pdf and
+ * http://everything2.com/title/Barrett+Reduction
+ *
+ * b = 32 (bite size of the processor architecture)
+ */
+void fieldModX(const uint32_t *A, uint32_t *result, uint8_t length,
+						 const uint32_t* modulus, const uint32_t* mu,
+						  const uint32_t k, const uint32_t result_length) {
+	uint32_t q1_q3[9]; 		// This is used for value q1 and q3
+	uint32_t q2_tmp[18]; 	// This is used for q2 and a temp var
+
+	// return if the given value is smaller than the modulus
+	if (length == arrayLength && isGreater(A, modulus, arrayLength) <= 0) {
+		if (A != result)
+				copy(A, result, arrayLength);
+		return;
+	} else if(length == 2 * arrayLength &&
+				isZero((uint32_t*)A+(sizeof(uint32_t)*arrayLength)) &&
+				isGreater(A, modulus, result_length) <= 0) {
+		copy(A, result, result_length);
+		return;
+	}
+
+	rshiftby(A, length, q1_q3, 9, k - 1); 	// q1 = floor(x / b^(k-1))
+	fieldMult(mu, q1_q3, q2_tmp, 9);		// q2 = q1 * mu
+	rshiftby(q2_tmp, 18, q1_q3, 8, k + 1);	// q3 = floor(q2 / b^(k+1))
+	// r1 = first 9 blocks of A				// r1 = x mod b^(k+1)
+	fieldMult(q1_q3, modulus, q2_tmp, 8);	// q2 = (q3 * m)
+	// r2 = first 9 blocks of q2_tmp		// r2 = q2 mod b^(k+1)
+	sub(A, q2_tmp, result, result_length); 	// r  = r1 - r2
+	// ??									// if(r < 0) r = r + b^(k+1)
+/*
+	setZero(q1_q3, 9);
+	if(isGreater(q1_q3, result, 9) >= 0) {
+		add(result, modulus, result, 9);
+	}
+*/
+	while (isGreater(result, modulus, result_length) == 1) 	// while(r >= m)
+		sub(result, modulus, result, result_length); 		//    r = r - m
+}
+
+inline void fieldModGeneric(uint32_t *A, const uint32_t *B) {
+	fieldModX(B, A, 2 * arrayLength, ecc_prime_p, ecc_prime_mu, ecc_order_k, 8);
+}
+
+inline void fieldModO(const uint32_t *A, uint32_t *result, uint8_t length) {
+	fieldModX(A, result, length, ecc_order_m, ecc_order_mu, ecc_order_k, 9);
+}
+
 static int fieldAddAndDivide(const uint32_t *x, const uint32_t *modulus, const uint32_t *reducer, uint32_t* result){
 	uint32_t n = add(x, modulus, result, arrayLength);
 	rshift(result);
@@ -349,6 +427,7 @@ static int fieldAddAndDivide(const uint32_t *x, const uint32_t *modulus, const u
 
 /*
  * Inverse A and output to B
+ * BEA for Inversion in Fp
  */
 static void fieldInv(const uint32_t *A, const uint32_t *modulus, const uint32_t *reducer, uint32_t *B){
 	uint32_t u[8],v[8],x1[8],x2[8];
@@ -408,7 +487,10 @@ static void fieldInv(const uint32_t *A, const uint32_t *modulus, const uint32_t 
 	}
 }
 
-void static ec_double(const uint32_t *px, const uint32_t *py, uint32_t *Dx, uint32_t *Dy){
+/*
+ * Generic doubling for an affine point of a short Weierstrass curve
+ */
+static void ec_double(const uint32_t *px, const uint32_t *py, uint32_t *Dx, uint32_t *Dy){
 	uint32_t tempA[8];
 	uint32_t tempB[8];
 	uint32_t tempC[8];
@@ -420,31 +502,33 @@ void static ec_double(const uint32_t *px, const uint32_t *py, uint32_t *Dx, uint
 		return;
 	}
 
-	fieldMult(px, px, tempD, arrayLength);
-	fieldModP(tempA, tempD);
-	setZero(tempB, 8);
-	tempB[0] = 0x00000001;
-	fieldSub(tempA, tempB, ecc_prime_m, tempC); //tempC = (qx^2-1)
-	tempB[0] = 0x00000003;
-	fieldMult(tempC, tempB, tempD, arrayLength);
-	fieldModP(tempA, tempD);//tempA = 3*(qx^2-1)
-	fieldAdd(py, py, ecc_prime_r, tempB); //tempB = 2*qy
-	fieldInv(tempB, ecc_prime_m, ecc_prime_r, tempC); //tempC = 1/(2*qy)
-	fieldMult(tempA, tempC, tempD, arrayLength); //tempB = lambda = (3*(qx^2-1))/(2*qy)
-	fieldModP(tempB, tempD);
+	fieldMult(px, px, tempD, arrayLength); 			// D = x^2
+	fieldModP(tempC, tempD);			   			// C = x^2 mod p
+	setZero(tempA, 8);
+	tempA[0] = 0x00000003;							// A = 3
+	fieldMult(tempC, tempA, tempD, arrayLength);	// D = 3x^2
+	fieldModP(tempC, tempD);			   			// C = 3x^2 mod p
+	fieldSub(tempC, ecc_param_a, ecc_prime_m, tempA);//A = 3x^2 mod p + a
+	fieldAdd(py, py, ecc_prime_r, tempB); 			// B = 2y
+	fieldInv(tempB, ecc_prime_m, ecc_prime_r, tempC);//C = (2y)^-1
+	fieldMult(tempA, tempC, tempD, arrayLength);	// D = (3x^2 + a) mod p * (2y)^-1
+	fieldModP(tempB, tempD);						// B = lambda = (3x^2 + a) mod p * (2y)^-1) mod p
 
-	fieldMult(tempB, tempB, tempD, arrayLength); //tempC = lambda^2
-	fieldModP(tempC, tempD);
-	fieldSub(tempC, px, ecc_prime_m, tempA); //lambda^2 - Px
-	fieldSub(tempA, px, ecc_prime_m, Dx); //lambda^2 - Px - Qx
+	fieldMult(tempB, tempB, tempD, arrayLength);	// D = lambda^2
+	fieldModP(tempC, tempD);						// C = lambda^2 mod p
+	fieldSub(tempC, px, ecc_prime_m, tempA); 		// A = lambda^2 - x
+	fieldSub(tempA, px, ecc_prime_m, Dx); 			//Dx = lambda^2 - 2x
 
-	fieldSub(px, Dx, ecc_prime_m, tempA); //tempA = qx-dx
-	fieldMult(tempB, tempA, tempD, arrayLength); //tempC = lambda * (qx-dx)
-	fieldModP(tempC, tempD);
-	fieldSub(tempC, py, ecc_prime_m, Dy); //Dy = lambda * (qx-dx) - px
+	fieldSub(px, Dx, ecc_prime_m, tempA); 			// A = x - Dx
+	fieldMult(tempB, tempA, tempD, arrayLength);	// D = lambda * (x - Dx)
+	fieldModP(tempC, tempD);						// C = lambda * (x - Dx) mod p
+	fieldSub(tempC, py, ecc_prime_m, Dy); 			//Dy = lambda * (x - Dx) - y
 }
 
-void static ec_add(const uint32_t *px, const uint32_t *py, const uint32_t *qx, const uint32_t *qy, uint32_t *Sx, uint32_t *Sy){
+/*
+ * Generic addition for two affine points of a short Weierstrass curve
+ */
+static void ec_add(const uint32_t *px, const uint32_t *py, const uint32_t *qx, const uint32_t *qy, uint32_t *Sx, uint32_t *Sy){
 	uint32_t tempA[8];
 	uint32_t tempB[8];
 	uint32_t tempC[8];
@@ -541,10 +625,11 @@ int ecc_ecdsa_sign(const uint32_t *d, const uint32_t *e, const uint32_t *k, uint
 		return -1;
 
 	// 4. Calculate the curve point (x_1, y_1) = k * G.
-	ecc_ec_mult(ecc_g_point_x, ecc_g_point_y, k, r, tmp1);
+	ecc_ec_mult(ecc_g_point_x, ecc_g_point_y, k, tmp2, tmp1);
+	tmp2[8] = 0x00000000;
 
 	// 5. Calculate r = x_1 \pmod{n}.
-	fieldModO(r, r, 8);
+	fieldModO(tmp2, r, 8);
 
 	// 5. If r = 0, go back to step 3.
 	if (isZero(r))
@@ -556,8 +641,16 @@ int ecc_ecdsa_sign(const uint32_t *d, const uint32_t *e, const uint32_t *k, uint
 	fieldModO(tmp1, tmp2, 16);
 
 	// 6. z + (r d)
-	tmp1[8] = add(e, tmp2, tmp1, 8);
-	fieldModO(tmp1, tmp3, 9);
+	uint32_t z[8];
+	copy(e, z, 8);
+
+	int i;
+	for(i = 0; i < ecc_prime_shift; i++)
+		rshift(z);
+
+	setZero(tmp1, 16);
+	tmp1[8] = add(z, tmp2, tmp1, 8);
+	fieldModO(tmp1, tmp3, 16);
 
 	// 6. k^{-1}
 	fieldInv(k, ecc_order_m, ecc_order_r, tmp2);
@@ -606,8 +699,15 @@ int ecc_ecdsa_validate(const uint32_t *x, const uint32_t *y, const uint32_t *e, 
 	// 3. Calculate w = s^{-1} \pmod{n}
 	fieldInv(s, ecc_order_m, ecc_order_r, w);
 
+	uint32_t z[8];
+	copy(e, z, 8);
+
+	int i;
+	for(i = 0; i < ecc_prime_shift; i++)
+		rshift(z);
+
 	// 4. Calculate u_1 = zw \pmod{n}
-	fieldMult(e, w, tmp, arrayLength);
+	fieldMult(z, w, tmp, arrayLength);
 	fieldModO(tmp, u1, 16);
 
 	// 4. Calculate u_2 = rw \pmod{n}
@@ -622,9 +722,10 @@ int ecc_ecdsa_validate(const uint32_t *x, const uint32_t *y, const uint32_t *e, 
 	ecc_ec_mult(x, y, u2, tmp2_x, tmp2_y);
 
 	// tmp3 = tmp1 + tmp2
-	ec_add(tmp1_x, tmp1_y, tmp2_x, tmp2_y, tmp3_x, tmp3_y);
+	ec_add(tmp1_x, tmp1_y, tmp2_x, tmp2_y, u1, tmp3_y);
 	// TODO: this u_1 * G + u_2 * Q_A  could be optimiced with Straus's algorithm.
 
+	fieldModO(u1, tmp3_x, 9);
 	return isSame(tmp3_x, r, arrayLength) ? 0 : -1;
 }
 

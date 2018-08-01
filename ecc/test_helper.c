@@ -5,6 +5,7 @@
  * Copyright (c) 2013 Marc Müller-Weinhardt <muewei@tzi.de>
  * Copyright (c) 2013 Lars Schmertmann <lars@tzi.de>
  * Copyright (c) 2013 Hauke Mehrtens <hauke@hauke-m.de>
+ * Copyright (c) 2018 Nikolas Rösener <nroesener@uni-bremen.de>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -32,7 +33,8 @@
  * [0]: http://cockrum.net/Implementation_of_ECC_on_an_8-bit_microcontroller.pdf
  *
  * This is a efficient ECC implementation on the secp256r1 curve for 32 Bit CPU
- * architectures. It provides basic operations on the secp256r1 curve and support
+ * architectures, modified to also support other short Weierstrass curves like Wei25519.
+ * It provides basic operations on short Weierstrass curves and support
  * for ECDH and ECDSA.
  */
 #include "test_helper.h"
@@ -58,13 +60,6 @@ void ecc_setRandom(uint32_t *secret){
 		secret[i] = rand();
 	}
 }
-const uint32_t ecc_prime_m[8] = {0xffffffff, 0xffffffff, 0xffffffff, 0x00000000,
-				 0x00000000, 0x00000000, 0x00000001, 0xffffffff};
-
-							
-/* This is added after an static byte addition if the answer has a carry in MSB*/
-const uint32_t ecc_prime_r[8] = {0x00000001, 0x00000000, 0x00000000, 0xffffffff,
-				 0xffffffff, 0xffffffff, 0xfffffffe, 0x00000000};
 
 #ifdef CONTIKI
 void

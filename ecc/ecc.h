@@ -5,6 +5,7 @@
  * Copyright (c) 2013 Marc Müller-Weinhardt <muewei@tzi.de>
  * Copyright (c) 2013 Lars Schmertmann <lars@tzi.de>
  * Copyright (c) 2013 Hauke Mehrtens <hauke@hauke-m.de>
+ * Copyright (c) 2018 Nikolas Rösener <nroesener@uni-bremen.de>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -32,7 +33,8 @@
  * [0]: http://cockrum.net/Implementation_of_ECC_on_an_8-bit_microcontroller.pdf
  *
  * This is a efficient ECC implementation on the secp256r1 curve for 32 Bit CPU
- * architectures. It provides basic operations on the secp256r1 curve and support
+ * architectures, modified to also support other short Weierstrass curves like Wei25519.
+ * It provides basic operations on short Weierstrass curves and support
  * for ECDH and ECDSA.
  */
 #include <inttypes.h>
@@ -40,8 +42,24 @@
 #define keyLengthInBytes 32
 #define arrayLength 8
 
-extern const uint32_t ecc_g_point_x[8];
-extern const uint32_t ecc_g_point_y[8];
+typedef enum {
+  SECP256R1,
+  WEI25519,
+  WEI25519_2
+} ec_curve_t;
+
+extern const uint32_t* ecc_param_a;		// domain parameter a
+extern const uint32_t* ecc_prime_m;		// the prime modulus p
+extern const uint32_t* ecc_prime_p;		// the prime modulus p with space for 2p
+extern const uint32_t* ecc_prime_r;		// value for fast reduction < 2p
+extern const uint32_t* ecc_order_m;		// the curve order
+extern const uint32_t* ecc_order_r;		// value for fast reduction < 2n
+extern const uint32_t* ecc_order_mu;	// static values mu for Barret Modular Reduction:
+extern const uint32_t* ecc_prime_mu; 	// floor(base^(2*n) / modulus) with base = 2^32, words = 8
+extern const uint32_t* ecc_g_point_x;	// x coordinate of the base point
+extern const uint32_t* ecc_g_point_y;	// y coordinate of the base point
+
+int ecc_ec_init(const ec_curve_t curve);
 
 //ec Functions
 void ecc_ec_mult(const uint32_t *px, const uint32_t *py, const uint32_t *secret, uint32_t *resultx, uint32_t *resulty);
