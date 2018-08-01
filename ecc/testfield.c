@@ -78,32 +78,21 @@ uint32_t eight[8] = {	0x00000008,0x00000000,0x00000000,0x00000000,
 						0x00000000,0x00000000,0x00000000,0x00000000};
 uint32_t full[8] = { 	0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,
 						0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF};
-//00000000fffffffeffffffffffffffffffffffff000000000000000000000001_16
-uint32_t resultFullAdd[8] = {	0x00000001,0x00000000,0x00000000,0xFFFFFFFF,
-								0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFE,0x00000000};
-uint32_t primeMinusOne[8]=	{	0xfffffffe,0xffffffff,0xffffffff,0x00000000,
-								0x00000000,0x00000000,0x00000001,0xffffffff};
-uint32_t resultDoubleMod[8] = { 0xfffffffd,0xffffffff,0xffffffff,0x00000000,
-								0x00000000,0x00000000,0x00000001,0xffffffff};
-//fffffffe00000002fffffffe0000000100000001fffffffe00000001fffffffc00000003fffffffcfffffffffffffffffffffffc000000000000000000000004_16
-uint32_t resultQuadMod[16] = {	0x00000004,0x00000000,0x00000000,0xFFFFFFFC,
-								0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFC,0x00000003,
-								0xFFFFFFFC,0x00000001,0xFFFFFFFE,0x00000001,
-								0x00000001,0xFFFFFFFE,0x00000002,0xFFFFFFFE};
-//00000002fffffffffffffffffffffffefffffffdffffffff0000000000000002_16
-uint32_t resultFullMod[8] = { 	0x00000002,0x00000000,0xFFFFFFFF,0xFFFFFFFD,
-								0xFFFFFFFE,0xFFFFFFFF,0xFFFFFFFF,0x00000002};
 
-static const uint32_t orderMinusOne[8] = {0xFC632550, 0xF3B9CAC2, 0xA7179E84, 0xBCE6FAAD,
-					0xFFFFFFFF, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF};
-static const uint32_t orderResultDoubleMod[8] = {0xFC63254F, 0xF3B9CAC2, 0xA7179E84, 0xBCE6FAAD, 0xFFFFFFFF, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF};
+static const uint32_t* resultFullAdd;
+static const uint32_t* primeMinusOne;
+static const uint32_t* resultDoubleMod;
+static const uint32_t* resultQuadMod;
+static const uint32_t* resultFullMod;
+static const uint32_t* orderMinusOne;
+static const uint32_t* orderResultDoubleMod;
 
 uint32_t temp[8];
 uint32_t temp2[16];
 
 void nullEverything(){
-	memset(temp, 0, sizeof(temp));
-	memset(temp2, 0, sizeof(temp));
+	memset(temp, 0, sizeof(uint32_t) * arrayLength);
+	memset(temp2, 0, sizeof(uint32_t) * arrayLength * 2 );
 }
 
 void fieldAddTest(){
@@ -236,6 +225,78 @@ void fieldInvTest(){
 
 // }
 
+static void setup_p256() {
+	//00000000fffffffeffffffffffffffffffffffff000000000000000000000001_16
+	static const uint32_t p256_resultFullAdd[8] = {	0x00000001,0x00000000,0x00000000,0xFFFFFFFF,
+									0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFE,0x00000000};
+	static const uint32_t p256_primeMinusOne[8]=	{	0xfffffffe,0xffffffff,0xffffffff,0x00000000,
+									0x00000000,0x00000000,0x00000001,0xffffffff};
+	static const uint32_t p256_resultDoubleMod[8] = { 0xfffffffd,0xffffffff,0xffffffff,0x00000000,
+									0x00000000,0x00000000,0x00000001,0xffffffff};
+	//fffffffe00000002fffffffe0000000100000001fffffffe00000001fffffffc00000003fffffffcfffffffffffffffffffffffc000000000000000000000004_16
+	static const uint32_t p256_resultQuadMod[16] = {	0x00000004,0x00000000,0x00000000,0xFFFFFFFC,
+									0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFC,0x00000003,
+									0xFFFFFFFC,0x00000001,0xFFFFFFFE,0x00000001,
+									0x00000001,0xFFFFFFFE,0x00000002,0xFFFFFFFE};
+	//00000002fffffffffffffffffffffffefffffffdffffffff0000000000000002_16
+	static const uint32_t p256_resultFullMod[8] = { 	0x00000002,0x00000000,0xFFFFFFFF,0xFFFFFFFD,
+									0xFFFFFFFE,0xFFFFFFFF,0xFFFFFFFF,0x00000002};
+
+	static const uint32_t p256_orderMinusOne[8] = {0xFC632550, 0xF3B9CAC2, 0xA7179E84, 0xBCE6FAAD,
+						0xFFFFFFFF, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF};
+	static const uint32_t p256_orderResultDoubleMod[8] = {0xFC63254F, 0xF3B9CAC2, 0xA7179E84, 0xBCE6FAAD, 0xFFFFFFFF, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF};
+
+	resultFullAdd = p256_resultFullAdd;
+	primeMinusOne = p256_primeMinusOne;
+	resultDoubleMod = p256_resultDoubleMod;
+	resultQuadMod = p256_resultQuadMod;
+	resultFullMod = p256_resultFullMod;
+	orderMinusOne = p256_orderMinusOne;
+	orderResultDoubleMod = p256_orderResultDoubleMod;
+
+	ecc_ec_init(SECP256R1);
+}
+
+static void setup_wei25519() {
+	static const uint32_t wei25519_resultFullAdd[8] = {0x00000013, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x80000000};
+	static const uint32_t wei25519_primeMinusOne[8] = {0xffffffec, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0x7fffffff};
+	static const uint32_t wei25519_resultDoubleMod[8] = {0xffffffeb, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0x7fffffff};
+	static const uint32_t wei25519_resultQuadMod[16] = {0x00000190, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0xffffffec, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0x3fffffff};
+	static const uint32_t wei25519_resultFullMod[8] = {0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000};
+	static const uint32_t wei25519_orderMinusOne[8] = {0x5cf5d3ec, 0x5812631a, 0xa2f79cd6, 0x14def9de, 0x00000000, 0x00000000, 0x00000000, 0x10000000};
+	static const uint32_t wei25519_orderResultDoubleMod[8] = {0x5cf5d3eb, 0x5812631a, 0xa2f79cd6, 0x14def9de, 0x00000000, 0x00000000, 0x00000000, 0x10000000};
+
+	resultFullAdd = wei25519_resultFullAdd;
+	primeMinusOne = wei25519_primeMinusOne;
+	resultDoubleMod = wei25519_resultDoubleMod;
+	resultQuadMod = wei25519_resultQuadMod;
+	resultFullMod = wei25519_resultFullMod;
+	orderMinusOne = wei25519_orderMinusOne;
+	orderResultDoubleMod = wei25519_orderResultDoubleMod;
+
+	ecc_ec_init(WEI25519);
+}
+
+static void run_tests() {
+	nullEverything();
+	//randomStuff();
+	nullEverything();
+	fieldAddTest();
+	nullEverything();
+	fieldSubTest();
+	nullEverything();
+	fieldMultTest();
+	nullEverything();
+	fieldModPTest();
+	nullEverything();
+	fieldModOTest();
+	nullEverything();
+	fieldInvTest();
+	nullEverything();
+	//rShiftTest();
+	//isOneTest();
+}
+
 #ifdef CONTIKI
 PROCESS(ecc_field_test, "ECC field test");
 AUTOSTART_PROCESSES(&ecc_field_test);
@@ -243,48 +304,26 @@ PROCESS_THREAD(ecc_field_test, ev, d)
 {
 	PROCESS_BEGIN();
 
-	nullEverything();
-	//randomStuff();
-	nullEverything();
-	fieldAddTest();
-	nullEverything();
-	fieldSubTest();
-	nullEverything();
-	fieldMultTest();
-	nullEverything();
-	fieldModPTest();
-	nullEverything();
-	fieldModOTest();
-	nullEverything();
-	fieldInvTest();
-	nullEverything();
-	//rShiftTest();
-	//isOneTest();
-	printf("%s\n", "All Tests succesfull!");
+	setup_p256();
+	run_tests();
+	printf("%s\n", "All P256 Tests succesfull!");
+
+	setup_wei25519();
+	run_tests();
+	printf("%s\n", "All Wei25519 Tests succesfull!");
 
 	PROCESS_END();
 }
 #else /* CONTIKI */
 int main(int argc, char const *argv[])
 {
-	nullEverything();
-	//randomStuff();
-	nullEverything();
-	fieldAddTest();
-	nullEverything();
-	fieldSubTest();
-	nullEverything();
-	fieldMultTest();
-	nullEverything();
-	fieldModPTest();
-	nullEverything();
-	fieldModOTest();
-	nullEverything();
-	fieldInvTest();
-	nullEverything();
-	//rShiftTest();
-	//isOneTest();
-	printf("%s\n", "All Tests succesfull!");
+	setup_p256();
+	run_tests();
+	printf("%s\n", "All P256 Tests succesfull!");
+
+	setup_wei25519();
+	run_tests();
+	printf("%s\n", "All Wei25519 Tests succesfull!");
 	return 0;
 }
 #endif /* CONTIKI */
