@@ -25,6 +25,7 @@ TAGS
 .gitignore
 ecc/testecc
 ecc/testfield
+ecc/testconvert
 *.d
 *.hex
 *.elf
@@ -62,3 +63,4 @@ dtls_config.h
 *.z1
 *.z1sp
 .project
+.vscode

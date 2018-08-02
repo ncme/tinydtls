@@ -36,7 +36,7 @@ ifeq ("@WITH_CONTIKI@", "1")
 include Makefile.contiki
 else
 ECC_OBJECTS:= $(patsubst %.c, %.o, $(ECC_SOURCES)) ecc_test.o
-PROGRAMS:= testecc testfield
+PROGRAMS:= testecc testfield testconvert
 CPPFLAGS=@CPPFLAGS@
 CFLAGS=-Wall -std=c99 -pedantic @CFLAGS@ -DTEST_INCLUDE
 LDLIBS=@LIBS@
@@ -54,6 +54,12 @@ ecc_test.o:	ecc.c ecc.h
 testecc: ecc_test.o test_helper.o
 
 testfield: ecc_test.o test_helper.o
+
+ifeq ($(WITH_C25519), "1")
+testconvert: convert.c convert.h ecc_test.o test_helper.o c25519.a
+else
+testconvert: convert.c convert.h ecc_test.o test_helper.o c25519.a
+endif
 
 check:	
 	echo DISTDIR: $(DISTDIR)
