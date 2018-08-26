@@ -31,55 +31,56 @@ static const uint32_t ed25519_Gy[8] = {0x66666658, 0x66666666, 0x66666666, 0x666
 
 /* Functions */
 
-static void eccdhTest(const uint32_t* secretA, const uint32_t* secretB, uint32_t* pub){
-	uint32_t tempx[8];
-	uint32_t tempy[8];
-	uint32_t tempAx2[8];
-	uint32_t tempAy2[8];
-	uint32_t tempBx1[8];
-	uint32_t tempBy1[8];
-	uint32_t tempBx2[8];
-	uint32_t tempBy2[8];
-	uint32_t BasePointx[8];
-	uint32_t BasePointy[8];
+static void eccdhTest(const uint32_t* dA, const uint32_t* dB, uint32_t* pub){
+	uint32_t QAx[8];
+	uint32_t QAy[8];
+	uint32_t ZAx[8];
+	uint32_t ZAy[8];
+	uint32_t QBx[8];
+	uint32_t QBy[8];
+	uint32_t ZBx[8];
+	uint32_t ZBy[8];
+	uint32_t Gx[8];
+	uint32_t Gy[8];
 	uint32_t ed25519_QAx[8];
 	uint32_t ed25519_QAy[8];
 	uint32_t ed25519_QBx[8];
 	uint32_t ed25519_QBy[8];
-	uint32_t ed25519_Axk[8];
-	uint32_t ed25519_Ayk[8];
-	uint32_t ed25519_Bxk[8];
-	uint32_t ed25519_Byk[8];
+	uint32_t ed25519_ZAx[8];
+	uint32_t ed25519_ZAy[8];
+	uint32_t ed25519_ZBx[8];
+	uint32_t ed25519_ZBy[8];
 
-	twisted_edwards_to_short_weierstrass(ed25519_Gx, ed25519_Gy, BasePointx, BasePointy);
+	twisted_edwards_to_short_weierstrass(ed25519_Gx, ed25519_Gy, Gx, Gy);
 	const uint32_t wei25519_Gx[8] = {0xaaad245a, 0xaaaaaaaa, 0xaaaaaaaa, 0xaaaaaaaa, 0xaaaaaaaa, 0xaaaaaaaa, 0xaaaaaaaa, 0x2aaaaaaa};
 	const uint32_t wei25519_Gy[8] = {0x7eced3d9, 0x29e9c5a2, 0x6d7c61b2, 0x923d4d7e, 0x7748d14c, 0xe01edd2c, 0xb8a086b4, 0x20ae19a1};
 
-	assert(ecc_isSame(BasePointx, wei25519_Gx, arrayLength));
-	assert(ecc_isSame(BasePointy, wei25519_Gy, arrayLength));
+	assert(ecc_isSame(Gx, wei25519_Gx, arrayLength));
+	assert(ecc_isSame(Gy, wei25519_Gy, arrayLength));
 
-	ecc_ec_mult(BasePointx, BasePointy, secretA, tempx, tempy); 	// Alice: Q_A
-	ecc_ec_mult(BasePointx, BasePointy, secretB, tempBx1, tempBy1); // Bob: Q_B
+	ecc_ec_mult(Gx, Gy, dA, QAx, QAy); // Alice: Q_A
+	ecc_ec_mult(Gx, Gy, dB, QBx, QBy); // Bob: Q_B
 
-	short_weierstrass_to_twisted_edwards(tempx, tempy, ed25519_QAx, ed25519_QAy);
-	short_weierstrass_to_twisted_edwards(tempBx1, tempBy1, ed25519_QBx, ed25519_QBy);
+	short_weierstrass_to_twisted_edwards(QAx, QAy, ed25519_QAx, ed25519_QAy);
+	short_weierstrass_to_twisted_edwards(QBx, QBy, ed25519_QBx, ed25519_QBy);
 
-	//public key exchange: Q_A to Bob, Q_B to Alice
+	//public key exchange: Q_A (ed25519) to Bob, Q_B (ed25519) to Alice
 
-	twisted_edwards_to_short_weierstrass(ed25519_QAx, ed25519_QAy, tempx, tempy);
-	twisted_edwards_to_short_weierstrass(ed25519_QBx, ed25519_QBy, tempBx1, tempBy1);
+	twisted_edwards_to_short_weierstrass(ed25519_QAx, ed25519_QAy, QAx, QAy);
+	twisted_edwards_to_short_weierstrass(ed25519_QBx, ed25519_QBy, QBx, QBy);
 
-	ecc_ec_mult(tempBx1, tempBy1, secretA, tempAx2, tempAy2); // Alice: (x_k,y_k) = d_A * Q_B
-	ecc_ec_mult(tempx, tempy, secretB, tempBx2, tempBy2); // Bob: (x_k, y_k) = d_B * Q_A
+	ecc_ec_mult(QBx, QBy, dA, ZAx, ZAy); // Alice: Z_A = d_A * Q_B
+	ecc_ec_mult(QAx, QAy, dB, ZBx, ZBy); // Bob:   Z_B = d_B * Q_A
 
-	assert(ecc_isSame(tempAx2, tempBx2, arrayLength));
-	assert(ecc_isSame(tempAy2, tempBy2, arrayLength));
+	short_weierstrass_to_twisted_edwards(ZAx, ZAy, ed25519_ZAx, ed25519_ZAy);
+	short_weierstrass_to_twisted_edwards(ZBx, ZBy, ed25519_ZBx, ed25519_ZBy);
 
-	short_weierstrass_to_twisted_edwards(tempAx2, tempAy2, ed25519_Axk, ed25519_Ayk);
-	short_weierstrass_to_twisted_edwards(tempBx2, tempBy2, ed25519_Bxk, ed25519_Byk);
-	assert(ecc_isSame(ed25519_Axk, ed25519_Bxk, arrayLength));
-	assert(ecc_isSame(ed25519_Ayk, ed25519_Byk, arrayLength));
-	ecc_copy(tempAx2, pub, arrayLength);
+	assert(ecc_isSame(ZAx, ZBx, arrayLength));
+	assert(ecc_isSame(ZAy, ZBy, arrayLength));
+
+	assert(ecc_isSame(ed25519_ZAx, ed25519_ZBx, arrayLength));
+	assert(ecc_isSame(ed25519_ZAy, ed25519_ZBy, arrayLength));
+	ecc_copy(QAx, pub, arrayLength);
 }
 
 #ifdef WITH_C25519
