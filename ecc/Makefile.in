@@ -58,7 +58,7 @@ testfield: ecc_test.o test_helper.o
 ifeq ($(WITH_C25519), "1")
 testconvert: convert.c convert.h ecc_test.o test_helper.o c25519.a
 else
-testconvert: convert.c convert.h ecc_test.o test_helper.o c25519.a
+testconvert: convert.c convert.h ecc_test.o test_helper.o
 endif
 
 check:	

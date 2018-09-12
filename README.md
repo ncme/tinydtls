@@ -4,13 +4,12 @@ Tinydtls is a library for Datagram Transport Layer Security (DTLS) covering both
 
 This version of the library modifies the ECC functions to support generic short Weierstrass curves and adds the curve Wei25519 that is birationally equivalent to Curve25519 and Ed25519.
 
-## CONTENTS
+## USAGE
 
-This library contains functions and structures that can help constructing a single-threaded UDP server with DTLS support in C99. The following components are available:
-* **dtls**
-   Basic support for DTLS with pre-shared key mode and RPK mode with ECC.
-* **tests**
-  The subdirectory tests contains test programs that show how each component is used.
+Use the new API function `int ecc_ec_init(const ec_curve_t curve)` to switch between curves. Supported curves are `SECP256R1` (default), `WEI25519` and `WEI25519_2`.
+For a reference on how to use the curve model transformations from `convert.h` see `testconvert.c`.
+
+To test the conversions against another library, build and link the [C25519](https://github.com/ncme/c25519) with `testconvert.c` and set the build variable `WITH_C25519`.
 
 ## BUILDING
 
